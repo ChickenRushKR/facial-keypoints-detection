@@ -311,16 +311,14 @@ def UNET(input_shape):
     input = Input(input_shape, name="Input")
 
     # downsampling
-    x, skip1 = downsample_block(input, 1, 2)
-    x, skip2 = downsample_block(x, 2, 4)
-    x, skip3 = downsample_block(x, 3, 6)
-    x, skip4 = downsample_block(x, 4, 8)
-    x, _ = downsample_block(x, 5, 10, pooling_on=False)
+    x, skip1 = downsample_block(input, 1, 8)
+    x, skip2 = downsample_block(x, 2, 16)
+    x, skip3 = downsample_block(x, 3, 32)
+    x, _ = downsample_block(x, 4, 64, pooling_on=False)
     # upsampling
-    x = upsample_block(x, skip4, 6, 8)
-    x = upsample_block(x, skip3, 7, 6)
-    x = upsample_block(x, skip2, 8, 4)
-    x = upsample_block(x, skip1, 9, 2)
+    x = upsample_block(x, skip3, 32, 8)
+    x = upsample_block(x, skip2, 16, 4)
+    x = upsample_block(x, skip1, 8, 2)
 
     output = Conv2D(2, kernel_size=(1, 1), strides=1, padding='valid', activation='linear', name="output")(x)
     output = Reshape(target_shape=(H*W*Nkeypoints,1))(output)
