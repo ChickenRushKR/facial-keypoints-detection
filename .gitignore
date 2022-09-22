@@ -1,2 +1,5 @@
 .idea/
 venv/
+*.png
+*.h5
+unet*.csv
