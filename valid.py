@@ -273,16 +273,16 @@ def UNET(input_shape):
     input = Input(input_shape, name="Input")
 
     # downsampling
-    x, skip1 = downsample_block(input, 1, 16)
-    x, skip2 = downsample_block(x, 2, 32)
-    x, skip3 = downsample_block(x, 3, 64)
-    x, skip4 = downsample_block(x, 4, 128)
-    x, _ = downsample_block(x, 5, 256, pooling_on=False)
+    x, skip1 = downsample_block(input, 1, 32)
+    x, skip2 = downsample_block(x, 2, 64)
+    x, skip3 = downsample_block(x, 3, 128)
+    x, skip4 = downsample_block(x, 4, 256)
+    x, _ = downsample_block(x, 5, 512, pooling_on=False)
     # upsampling
-    x = upsample_block(x, skip4, 6, 128)
-    x = upsample_block(x, skip3, 7, 64)
-    x = upsample_block(x, skip2, 8, 32)
-    x = upsample_block(x, skip1, 9, 16)
+    x = upsample_block(x, skip4, 6, 256)
+    x = upsample_block(x, skip3, 7, 128)
+    x = upsample_block(x, skip2, 8, 64)
+    x = upsample_block(x, skip1, 9, 32)
 
     output = Conv2D(2, kernel_size=(1, 1), strides=1, padding='valid', activation='linear', name="output")(x)
     output = Reshape(target_shape=(H*W*Nkeypoints,1))(output)
@@ -452,11 +452,11 @@ H = 512
 
 def main():
     data_dir = "./data"
-    train_dir = "train"
-    train_csv = "training.csv"
-    test_dir = "test"
-    test_csv = "test.csv"
-    modelname = "./model/3/unet_lr=1e-07.h5"
+    train_dir = "train2"
+    train_csv = "train2.csv"
+    test_dir = "test2"
+    test_csv = "test2.csv"
+    modelname = "./model/3/unet_lr=1e-05.h5"
     df_train = pd.read_csv(os.path.join(train_csv))
     df_test = pd.read_csv(os.path.join(test_csv))
 

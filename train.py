@@ -311,14 +311,16 @@ def UNET(input_shape):
     input = Input(input_shape, name="Input")
 
     # downsampling
-    x, skip1 = downsample_block(input, 1, 8)
-    x, skip2 = downsample_block(x, 2, 16)
-    x, skip3 = downsample_block(x, 3, 32)
-    x, _ = downsample_block(x, 4, 64, pooling_on=False)
+    x, skip1 = downsample_block(input, 1, 64)
+    x, skip2 = downsample_block(x, 2, 128)
+    x, skip3 = downsample_block(x, 3, 256)
+    x, skip4 = downsample_block(x, 4, 512)
+    x, _ = downsample_block(x, 5, 512, pooling_on=False)
     # upsampling
-    x = upsample_block(x, skip3, 32, 8)
-    x = upsample_block(x, skip2, 16, 4)
-    x = upsample_block(x, skip1, 8, 2)
+    x = upsample_block(x, skip4, 6, 256)
+    x = upsample_block(x, skip3, 7, 128)
+    x = upsample_block(x, skip2, 8, 64)
+    x = upsample_block(x, skip1, 9, 64)
 
     output = Conv2D(2, kernel_size=(1, 1), strides=1, padding='valid', activation='linear', name="output")(x)
     output = Reshape(target_shape=(H*W*Nkeypoints,1))(output)
@@ -464,10 +466,10 @@ def calcRMSError(kps_gt, kps_preds):
 
 def main():
     data_dir = "./data"
-    train_dir = "train"
-    train_csv = "training.csv"
-    test_dir = "test"
-    test_csv = "test.csv"
+    train_dir = "train2"
+    train_csv = "train2.csv"
+    test_dir = "test2"
+    test_csv = "test2.csv"
 
     df_train = pd.read_csv(os.path.join(train_csv))
     df_test = pd.read_csv(os.path.join(test_csv))
@@ -514,14 +516,14 @@ def main():
                                 kp_dict,
                                 transform_dict=transform_dict,
                                 augment=False, 
-                                batch_size=8)
+                                batch_size=16)
 
     val_gen = MaskGenerator(os.path.join(data_dir, train_dir),
                                 val_idxs,
                                 img_dict,
                                 kp_dict,
                                 augment=False,
-                                batch_size=8)
+                                batch_size=16)
 
     print("\n# of training batches= %d" % len(train_gen))
     print("# of validation batches= %d" % len(val_gen))
