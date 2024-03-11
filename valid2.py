@@ -273,18 +273,17 @@ def UNET(input_shape):
     input = Input(input_shape, name="Input")
 
     # downsampling
-    x, skip1 = downsample_block(input, 1, 16)
-    x, skip2 = downsample_block(x, 2, 32)
-    x, skip3 = downsample_block(x, 3, 64)
-    x, skip4 = downsample_block(x, 4, 128)
-    x, _ = downsample_block(x, 5, 256, pooling_on=False)
+    x, skip1 = downsample_block(input, 1, 64)
+    x, skip2 = downsample_block(x, 2, 128)
+    x, skip3 = downsample_block(x, 3, 256)
+    x, skip4 = downsample_block(x, 4, 512)
+    x, _ = downsample_block(x, 5, 512, pooling_on=False)
     # upsampling
-    x = upsample_block(x, skip4, 6, 128)
-    x = upsample_block(x, skip3, 7, 64)
-    x = upsample_block(x, skip2, 8, 32)
-    x = upsample_block(x, skip1, 9, 16)
-
-    output = Conv2D(2, kernel_size=(1, 1), strides=1, padding='valid', activation='linear', name="output")(x)
+    x = upsample_block(x, skip4, 6, 256)
+    x = upsample_block(x, skip3, 7, 128)
+    x = upsample_block(x, skip2, 8, 64)
+    x = upsample_block(x, skip1, 9, 64)
+    output = Conv2D(1, kernel_size=(1, 1), strides=1, padding='valid', activation='linear', name="output")(x)
     output = Reshape(target_shape=(H*W*Nkeypoints,1))(output)
 
 
@@ -323,15 +322,13 @@ def calcKeypoints(model, gen):
         # print("\nBatch {}".format(i))
         imgs, batch_gt = gen[i]
         batch_preds = model.predict_on_batch(imgs)
-        print(batch_gt.shape)
-        print(batch_preds.shape)
         n_imgs = imgs.shape[0]
         # print("\t# of Images {}".format(n_imgs))
         for j in range(n_imgs):
             mask_gt = batch_gt[j]
-            mask_gt = np.reshape(mask_gt, newshape=(512, 64, 2))
+            mask_gt = np.reshape(mask_gt, newshape=(512, 64, 1))
             mask_pred = batch_preds[j]
-            mask_pred = np.reshape(mask_pred, newshape=(512, 64, 2))
+            mask_pred = np.reshape(mask_pred, newshape=(512, 64, 1))
             nchannels = mask_gt.shape[-1]
             # print(nchannels)
             gt_list = []
@@ -431,7 +428,7 @@ def show_masks(batch_imgs, batch_gt_masks, include_preds= False, predictions=Non
 
         # ground-truth mask
         gt_mask = batch_gt_masks[c]
-        gt_mask = np.reshape(gt_mask, newshape=(512,64,2))
+        gt_mask = np.reshape(gt_mask, newshape=(512,64,1))
         gt_mask = np.sum(gt_mask, axis=-1)
         gt_mask = np.stack([gt_mask,gt_mask,gt_mask], axis=-1)
 
@@ -439,7 +436,7 @@ def show_masks(batch_imgs, batch_gt_masks, include_preds= False, predictions=Non
         # prediction mask
         if include_preds: 
             pred_mask = predictions[c]
-            pred_mask = np.reshape(pred_mask, newshape=(512,64,2))
+            pred_mask = np.reshape(pred_mask, newshape=(512,64,1))
             pred_mask = np.sum(pred_mask, axis=-1)
             pred_mask = np.stack([pred_mask,pred_mask,pred_mask], axis=-1)
         
@@ -451,22 +448,22 @@ def show_masks(batch_imgs, batch_gt_masks, include_preds= False, predictions=Non
                 break
 
         
-Nkeypoints = 2
+Nkeypoints = 1
 W = 64
 H = 512
 
 def main():
     data_dir = "./data"
-    train_dir = "train2"
-    train_csv = "train2.csv"
-    test_dir = "test2"
-    test_csv = "test2.csv"
+    train_dir = "train3"
+    train_csv = "train3.csv"
+    test_dir = "test3"
+    test_csv = "test3.csv"
 
     df_train = pd.read_csv(os.path.join(train_csv))
     df_test = pd.read_csv(os.path.join(test_csv))
 
-    n_train = df_train['Image'].size
-    n_test = df_test['Image'].size
+    n_train = df_train['name'].size
+    n_test = df_test['name'].size
 
     df_kp = df_train.iloc[:,1:5]
 
@@ -482,7 +479,7 @@ def main():
         else:
             idxs.append(i)
 
-            img_dict[i] = df_train['Image'][i]
+            img_dict[i] = df_train['name'][i]
 
             # keypoints
             kp = df_kp.iloc[i].values.tolist()
@@ -517,12 +514,12 @@ def main():
                                 batch_size=8)
     imgs, masks = val_gen[0]
     unet = UNET(input_shape=(512, 64, 1))
-    unet.load_weights("./model/3/unet_lr=1e-07.h5")
+    unet.load_weights("./unet_lr=1e-06.h5")
     preds = unet.predict_on_batch(imgs)
     kps_gt, kps_preds = calcKeypoints(unet, val_gen)
     pred_mask = preds[1]
-    pred_mask = np.reshape(pred_mask, newshape=(512,64,2))
-    showAllMasks(pred_mask, "test")
+    pred_mask = np.reshape(pred_mask, newshape=(512,64,1))
+    # showAllMasks(pred_mask, "test")
     # showAllMasks(preds[1], "name")
     # print(kps_gt.shape, kps_preds.shape)
     rms_error = calcRMSError(kps_gt, kps_preds)

@@ -48,91 +48,12 @@ class MaskGenerator(tensorflow.keras.utils.Sequence):
 
         return int(np.floor(len(self.idxs) * multiplier / self.batch_size))
 
-    # check if transformed point is located within image boundaries
-    def _checkBoundaries(self, p):
-
-        # x dimension
-        if p[0] < 0:
-            px = 0
-        elif p[0] > self.target_size[0]:
-            px = self.target_size[0]
-        else:
-            px = p[0]
-
-        # y dimension
-        if p[1] < 0:
-            py = 0
-        elif p[1] > self.target_size[1]:
-            py = self.target_size[1]
-        else:
-            py = p[1]
-
-        return (int(px), int(py))
-
-    # apply shifts, rotations, scaling and flips to original image and keypoints
-    def _transform_image(self, img, keypoints):
-
-        aug_keypoints = []
-
-        c = (img.shape[0] // 2, img.shape[1] // 2)
-
-        if self.transform_dict['Flip']:
-            flip = random.choice([True, False])
-            if flip:
-                img = cv.flip(img, flipCode=1)
-
-        if self.transform_dict['Rotate']:
-
-            if self.transform_dict['Scale']:
-                s = random.uniform(0.7, 1.0)
-            else:
-                s = 1.0
-
-            r = random.randint(-10, 10)
-            M_rot = cv.getRotationMatrix2D(center=(img.shape[0] // 2, img.shape[1] // 2), angle=r, scale=s)
-            img = cv.warpAffine(img, M_rot, (img.shape[0], img.shape[1]), borderMode=cv.BORDER_CONSTANT, borderValue=1)
-
-        if self.transform_dict['Shift']:
-            tx = random.randint(-20, 20)
-            ty = random.randint(-20, 20)
-            M_shift = np.array([[1, 0, tx], [0, 1, ty]], dtype=np.float32)
-            img = cv.warpAffine(img, M_shift, (img.shape[0], img.shape[1]),
-                                borderMode=cv.BORDER_CONSTANT, borderValue=1)
-
-        # transform keypoints
-        c = (img.shape[0] // 2, img.shape[1] // 2)
-
-        for i in range(0, len(keypoints) - 1, 2):
-
-            px = keypoints[i]
-            py = keypoints[i+1]
-            p = np.array([px, py, 1], dtype=int)
-
-            # apply flip
-            if self.transform_dict['Flip'] and flip:
-                p[0] = c[0] - (p[0] - c[0])
-
-            # apply rotation
-            if self.transform_dict['Rotate']:
-                p = np.dot(M_rot, p)
-
-            # apply horizontal / vertical shifts
-            if self.transform_dict['Shift']:
-                p[0] += tx
-                p[1] += ty
-
-            p = self._checkBoundaries(p)
-
-            aug_keypoints.append(p[0])
-            aug_keypoints.append(p[1])
-
-        return img, aug_keypoints
 
     # load image from disk
     def _load_image(self, fn):
 
         img = cv.imread(filename=os.path.join(self.directory, fn))
-        # print(os.path.join(self.directory, fn), img)
+        # print(os.path.join(self.directory, fn), fn)
         # print(fn)
         # img = cv.cvtColor(img, cv.COLOR_GRAY2BGR)
         # img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
@@ -319,38 +240,32 @@ def calcKeypoints(model, gen):
     kps_preds = []
     nbatches = len(gen)
     img_dict = gen.img_dict
-    print(len(img_dict))
-    for i in range(nbatches):
+    for i in range(len(img_dict)):
         # print("\nBatch {}".format(i))
-        imgs, batch_gt = gen[i]
-        batch_preds = model.predict_on_batch(imgs)
-        n_imgs = imgs.shape[0]
+        
+        img = gen._load_image(img_dict[i])
+        img = np.reshape(img, (1, 512, 64, 1))
+        # print(img.shape)
+        pred = model.predict_on_batch(img)
+        # n_imgs = imgs.shape[0]
         # print("\t# of Images {}".format(n_imgs))
-        for j in range(n_imgs):
-            mask_gt = batch_gt[j]
-            mask_gt = np.reshape(mask_gt, newshape=(512, 64, 1))
-            mask_pred = batch_preds[j]
-            mask_pred = np.reshape(mask_pred, newshape=(512, 64, 1))
-            nchannels = mask_gt.shape[-1]
-            print(nchannels)
-            gt_list = []
-            pred_list = []
+            
+        mask_pred = np.reshape(pred, newshape=(512, 64, 1))
+        # nchannels = mask_gt.shape[-1]
+        # print(nchannels)
+        pred_list = []
+        nchannels=1
+        for k in range(nchannels):
+            xpred, ypred = findCoordinates(mask_pred[:, :, k])  # maskToKeypoints(mask_pred[:, :, k])
 
-            for k in range(nchannels):
-                xgt, ygt = findCoordinates(mask_gt[:, :, k]) # maskToKeypoints(mask_gt[:, :, k])
-                xpred, ypred = findCoordinates(mask_pred[:, :, k])  # maskToKeypoints(mask_pred[:, :, k])
+            pred_list.append(xpred)
+            pred_list.append(ypred)
 
-                gt_list.append(xgt)
-                gt_list.append(ygt)
-
-                pred_list.append(xpred)
-                pred_list.append(ypred)
-
-            kps_gt.append(gt_list)
-            kps_preds.append(pred_list)
+        
+        print(img_dict[i], pred_list[0], pred_list[1])
+        img *= 255
+        show_keypoints(img, pred_list, img_dict[i])
     
-
-    return np.array(kps_gt, dtype=np.float32), np.array(kps_preds, dtype=np.float32)
 
 
 def calcRMSError(kps_gt, kps_preds):
@@ -360,7 +275,7 @@ def calcRMSError(kps_gt, kps_preds):
 
     return error
 
-def show_keypoints(batch_imgs, batch_labels, predictions=None):
+def show_keypoints(batch_imgs, predictions, name):
 
     def draw_keypoints(img, keypoints, col):
         # print("\n{}".format(len(keypoints)))
@@ -379,17 +294,11 @@ def show_keypoints(batch_imgs, batch_labels, predictions=None):
         img = np.stack([img,img,img], axis=-1)
 
         # draw ground-truth keypoints on image
-        if batch_labels is not None:
-            img = draw_keypoints(img, batch_labels[i], col=(0,0,255))
 
         # draw predicted keypoints on image
-        if predictions is not None:
-            img = draw_keypoints(img, predictions[i], col=(255,0,0))
+        img = draw_keypoints(img, predictions, col=(255,0,0))
         
-        cv.imshow('result', img)
-        while True:
-            if cv.waitKey(1000) == ord('n'):
-                break
+        cv.imwrite(f'./result/{name}', img)
         # axes[r, c].imshow(img)
     # plt.savefig(name)
     # plt.show()
@@ -464,56 +373,50 @@ def main():
     n_train = df_train['name'].size
     n_test = df_test['name'].size
 
-    df_kp = df_train.iloc[:,1:5]
+    df_kp = df_test.iloc[:,1:3]
 
     idxs = []
 
     img_dict = {}
     kp_dict = {}
 
-    for i in range(n_train):
+    for i in range(n_test):
 
-        if True in df_train.iloc[i, 1:5].isna().values:
+        if True in df_test.iloc[i, 1:5].isna().values:
             continue
         else:
             idxs.append(i)
 
-            img_dict[i] = df_train['name'][i]
+            img_dict[i] = df_test['name'][i]
 
             # keypoints
             kp = df_kp.iloc[i].values.tolist()
             kp_dict[i] = kp
 
-    random.shuffle(idxs)
-
+    # random.shuffle(idxs)
+    # print(idxs)
     # subset = int(0.1*len(idxs))
 
-    cutoff_idx = int(0.9*len(idxs))
-    train_idxs = idxs[0:cutoff_idx]
-    val_idxs = idxs[cutoff_idx:len(idxs)]
 
-    print("\n# of Training Images: {}".format(len(train_idxs)))
-    print("# of Val Images: {}".format(len(val_idxs)))
+    val_idxs = idxs[0:len(idxs)]
+
+    # print("\n# of Training Images: {}".format(len(train_idxs)))
+    print("# of Test Images: {}".format(len(val_idxs)))
 
     transform_dict = {"Flip": False, "Shift": False, "Scale": False, "Rotate": False}
 
-    val_gen = MaskGenerator(os.path.join(data_dir, train_dir),
+    val_gen = MaskGenerator(os.path.join(data_dir, test_dir),
                                 val_idxs,
                                 img_dict,
                                 kp_dict,
                                 augment=False,
                                 batch_size=1)
+    imgs, masks = val_gen[0]
     unet = UNET(input_shape=(512, 64, 1))
     unet.load_weights(modelname)
     # preds = unet.predict_on_batch(imgs)
-    kps_gt, kps_preds = calcKeypoints(unet, val_gen)
-    for i in range(len(kps_gt)):
-        print(kps_gt[i], kps_preds[i])
-    rms_error = calcRMSError(kps_gt, kps_preds)
-    print("Validation RMS Error = {}".format(rms_error))
+    calcKeypoints(unet, val_gen)
     
-    show_masks(imgs, masks, include_preds=True, predictions = preds)
-    show_keypoints(imgs, kps_gt, predictions=kps_preds)
 
 if __name__ == "__main__":
     main()

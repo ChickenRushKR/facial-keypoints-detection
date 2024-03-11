@@ -15,9 +15,10 @@ from tensorflow.keras.models import Model
 from tensorflow.keras.optimizers import SGD, RMSprop, Adam
 from tensorflow.keras.regularizers import l2
 
-Nkeypoints = 2
+Nkeypoints = 1
 W = 64
 H = 512
+
 
 class MaskGenerator(tensorflow.keras.utils.Sequence):
 
@@ -266,7 +267,7 @@ def show_masks(batch_imgs, batch_gt_masks, nrows, ncols, include_preds= False, p
 
         # ground-truth mask
         gt_mask = batch_gt_masks[c]
-        gt_mask = np.reshape(gt_mask, newshape=(512,64,2))
+        gt_mask = np.reshape(gt_mask, newshape=(512,64,1))
         gt_mask = np.sum(gt_mask, axis=-1)
 
         axes[0, c].imshow(img)
@@ -275,7 +276,7 @@ def show_masks(batch_imgs, batch_gt_masks, nrows, ncols, include_preds= False, p
         # prediction mask
         if include_preds: 
             pred_mask = predictions[c]
-            pred_mask = np.reshape(pred_mask, newshape=(512,64,2))
+            pred_mask = np.reshape(pred_mask, newshape=(512,64,1))
             pred_mask = np.sum(pred_mask, axis=-1)
             axes[2, c].imshow(pred_mask)
 
@@ -322,7 +323,7 @@ def UNET(input_shape):
     x = upsample_block(x, skip2, 8, 64)
     x = upsample_block(x, skip1, 9, 64)
 
-    output = Conv2D(2, kernel_size=(1, 1), strides=1, padding='valid', activation='linear', name="output")(x)
+    output = Conv2D(1, kernel_size=(1, 1), strides=1, padding='valid', activation='linear', name="output")(x)
     output = Reshape(target_shape=(H*W*Nkeypoints,1))(output)
 
     model = Model(inputs=input, outputs=output, name="Output")
@@ -428,9 +429,9 @@ def calcKeypoints(model, gen):
         # print("\t# of Images {}".format(n_imgs))
         for j in range(n_imgs):
             mask_gt = batch_gt[j]
-            mask_gt = np.reshape(mask_gt, newshape=(512, 64, 2))
+            mask_gt = np.reshape(mask_gt, newshape=(512, 64, 1))
             mask_pred = batch_preds[j]
-            mask_pred = np.reshape(mask_pred, newshape=(512, 64, 2))
+            mask_pred = np.reshape(mask_pred, newshape=(512, 64, 1))
             nchannels = mask_gt.shape[-1]
             # print(nchannels)
             gt_list = []
@@ -466,16 +467,16 @@ def calcRMSError(kps_gt, kps_preds):
 
 def main():
     data_dir = "./data"
-    train_dir = "train2"
-    train_csv = "train2.csv"
-    test_dir = "test2"
-    test_csv = "test2.csv"
+    train_dir = "train3"
+    train_csv = "train3.csv"
+    test_dir = "test3"
+    test_csv = "test3.csv"
 
     df_train = pd.read_csv(os.path.join(train_csv))
     df_test = pd.read_csv(os.path.join(test_csv))
 
-    n_train = df_train['Image'].size
-    n_test = df_test['Image'].size
+    n_train = df_train['name'].size
+    n_test = df_test['name'].size
 
     df_kp = df_train.iloc[:,1:5]
 
@@ -491,7 +492,7 @@ def main():
         else:
             idxs.append(i)
 
-            img_dict[i] = df_train['Image'][i]
+            img_dict[i] = df_train['name'][i]
 
             # keypoints
             kp = df_kp.iloc[i].values.tolist()
@@ -540,9 +541,9 @@ def main():
     loss_type = "mse"
     unet = UNET(input_shape=(512, 64, 1))
     print(unet.summary())
-    unet = trainModel(unet, train_gen, val_gen, "unet", loss_type, n_epochs=100, old_lr=1e-5, new_lr=1e-5, load_saved_wts=False)
+    unet = trainModel(unet, train_gen, val_gen, "unet", loss_type, n_epochs=50, old_lr=1e-5, new_lr=1e-6, load_saved_wts=True)
 
-    unet.save('model.h5')
+    unet.save("unet_lr=1e-5.h5")
 
 
 if __name__ == "__main__":
